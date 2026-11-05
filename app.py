@@ -3,6 +3,7 @@ Uso: GET /resolve?url=<youtube-url>
 Retorna HTTP 302 para o stream de audio direto (melhor formato audio-only).
 O SA-MP (PlayAudioStreamForPlayer) segue o redirect e toca o audio.
 """
+import os
 import re
 from flask import Flask, request, redirect, jsonify
 import yt_dlp
@@ -10,6 +11,22 @@ import yt_dlp
 app = Flask(__name__)
 
 YT_RE = re.compile(r"(youtube\.com/watch|youtu\.be/|youtube\.com/shorts/)", re.I)
+
+# Cookies do YouTube (opcional): o conteudo vem pela variavel de ambiente
+# YT_COOKIES no Render (nunca vai para o GitHub publico). Se estiver definida,
+# grava num arquivo local e passa ao yt-dlp, para o YouTube nao pedir login
+# em IP de servidor. O arquivo tambem pode existir localmente (cookies.txt)
+# para teste fora do Render.
+_COOKIE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
+_env_cookies = os.environ.get("YT_COOKIES", "")
+if _env_cookies.strip():
+    try:
+        # Aceita tanto quebras de linha reais quanto "\n" literal
+        _content = _env_cookies.replace("\\n", "\n")
+        with open(_COOKIE_PATH, "w", encoding="utf-8") as _f:
+            _f.write(_content)
+    except Exception:
+        pass
 
 YDL_OPTS = {
     "quiet": True,
@@ -21,6 +38,8 @@ YDL_OPTS = {
     "extract_flat": False,
     "skip_download": True,
 }
+if os.path.exists(_COOKIE_PATH) and os.path.getsize(_COOKIE_PATH) > 0:
+    YDL_OPTS["cookiefile"] = _COOKIE_PATH
 
 
 def extract_audio_url(yt_url):
@@ -44,7 +63,12 @@ def extract_audio_url(yt_url):
 
 @app.route("/")
 def index():
-    return jsonify({"ok": True, "service": "yt-resolver", "usage": "/resolve?url=<youtube-url>"})
+    return jsonify({
+        "ok": True,
+        "service": "yt-resolver",
+        "usage": "/resolve?url=<youtube-url>",
+        "cookies": bool(YDL_OPTS.get("cookiefile")),
+    })
 
 
 @app.route("/search")
