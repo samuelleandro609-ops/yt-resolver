@@ -47,6 +47,26 @@ def index():
     return jsonify({"ok": True, "service": "yt-resolver", "usage": "/resolve?url=<youtube-url>"})
 
 
+@app.route("/search")
+def search():
+    query = (request.args.get("q") or "").strip()
+    if not query:
+        return jsonify({"ok": False, "error": "missing q param"}), 400
+    if len(query) > 200:
+        return jsonify({"ok": False, "error": "query too long"}), 400
+    try:
+        # ytsearch1: pega o primeiro resultado da busca no YouTube
+        audio_url, title, duration = extract_audio_url("ytsearch1:" + query)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:300]}), 502
+    if not audio_url:
+        return jsonify({"ok": False, "error": "no result found"}), 502
+    resp = redirect(audio_url, code=302)
+    resp.headers["X-Title"] = title[:200]
+    resp.headers["X-Duration"] = str(duration)
+    return resp
+
+
 @app.route("/resolve")
 def resolve():
     yt_url = (request.args.get("url") or "").strip()
